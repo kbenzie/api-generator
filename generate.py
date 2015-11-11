@@ -9,6 +9,9 @@ import json
 import sys
 
 
+indent = '  '
+
+
 def help():
     print('generate.py [-h] [-o <output dir>] [-n <client name>]')
 
@@ -64,10 +67,35 @@ def define(node):
     if None != value:
         lines = value.text.split('\n')
         if 1 < len(lines):
-            define += ' \\\n  ' + ' \\\n  '.join(lines)
+            continuation = ' \\\n'
+            define += continuation + (continuation + indent).join(lines)
         elif 1 == len(lines):
             define += ' ' + lines[0]
     print(define)
+
+
+def struct(node, semicolon = True):
+    struct = 'struct ' + str.strip(node.text)
+
+    members = node.findall('member')
+    if 0 < len(members):
+        struct += ' {'
+        member_decls = []
+        for member in members:
+            if None != member:
+                type = member.find('type')
+                if None != type:
+                    member_decl = indent + type.text
+                    if None != member.text:
+                        member_decl += ' ' + member.text
+                    member_decls.append(member_decl)
+        if 0 < len(member_decls):
+            struct += '\n' + ';\n'.join(member_decls) + ';\n'
+        struct += '}'
+
+    if semicolon:
+        struct += ';'
+    print(struct)
 
 
 def typedef(node):
@@ -83,6 +111,8 @@ def generate(schema_file, output_dir, client_name):
             include(node)
         elif 'define' == node.tag:
             define(node)
+        elif 'struct' == node.tag:
+            struct(node)
         elif 'typedef' == node.tag:
             typedef(node)
 

@@ -76,4 +76,30 @@ Will generate the following macro definitions.
 
 Note that new lines in multi line `value` tags will be escaped automatically.
 
-### Type Definitions
+### Structures
+
+Introducing structures is done using the `struct` tag which can be used to
+describe forward declarations, empty structures, and structures with member
+objects. Providing only the structure name will result in a forward declaration
+whilst an empty `member` node results in an empty structure, finally use the
+`member` tag with an optional name and a `type` tag to produce a member object.
+
+```xml
+<struct>forward_t</struct>
+<struct>empty_t<member></member></struct>
+<struct>position_t
+  <member>x<type>float</type></member>
+  <member>y<type>float</type></member>
+</struct>
+```
+
+This outputs the following set of structure output.
+
+```c
+struct forward_decl_t;
+struct empty_t {};
+struct position_t {
+  float x;
+  float y;
+};
+```

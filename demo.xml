@@ -14,17 +14,17 @@
   abort();
 }</value></define>
 
+  <struct>forward_decl_t</struct>
+  <struct>empty_t<member></member></struct>
   <struct>position_t
-    <member><type>float</type>x</member>
-    <member><type>float</type>y</member>
-    <member><type>float</type>z</member>
+    <member>x<type>float</type></member>
+    <member>y<type>float</type></member>
   </struct>
 
   <typedef><type>int32_t</type>error_t</typedef>
   <typedef><type><struct>forward_t</struct>*</type>forward</typedef>
   <typedef><type><struct>position_t
       <member><type>float</type>x</member>
-      <member><type>float</type>y</member>
       <member><type>float</type>z</member>
   </struct></type>position_t</typedef>
 
