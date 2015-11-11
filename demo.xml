@@ -26,7 +26,7 @@
       <member><type>float</type>x</member>
       <member><type>float</type>y</member>
       <member><type>float</type>z</member>
-    </struct><type>position_t</typedef>
+  </struct></type>position_t</typedef>
 
   <enum>
     <constant></constant>
