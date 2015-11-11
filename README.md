@@ -14,7 +14,7 @@ The schema is defined as an XML document which takes the form.
 ```xml
 <?xml version="1.0"?>
 <interface>
-    <!-- xml elements describing the Core interface -->
+    <!-- xml elements describing the API interface -->
 </interface>
 ```
 
