@@ -15,11 +15,26 @@
 }</value></define>
 
   <struct>forward_decl_t</struct>
-  <struct>empty_t<member></member></struct>
-  <struct>position_t
-    <member>x<type>float</type></member>
-    <member>y<type>float</type></member>
-  </struct>
+  <struct>empty_t<body></body></struct>
+  <struct>position_t<body>
+      <member>x<type>float</type></member>
+      <member>y<type>float</type></member>
+  </body></struct>
+
+  <enum>positions<body>
+      <constant>CENTER</constant>
+      <constant>LEFT<value>-1</value></constant>
+      <constant>RIGHT<value>1</value></constant>
+  </body></enum>
+
+  <enum><body>
+      <constant>SUCCESS</constant>
+      <constant>FAILURE</constant>
+  </body></enum>
+
+  <function><return>void</return>foo
+    <param><type>uint32_t</type>count</param>
+  </function>
 
   <typedef><type>int32_t</type>error_t</typedef>
   <typedef><type><struct>forward_t</struct>*</type>forward</typedef>
@@ -28,11 +43,4 @@
       <member><type>float</type>z</member>
   </struct></type>position_t</typedef>
 
-  <enum>
-    <constant></constant>
-  </enum>
-
-  <function><return>void</return>foo
-    <param><type>uint32_t</type>count</param>
-  </function>
 </interface>

@@ -80,17 +80,19 @@ Note that new lines in multi line `value` tags will be escaped automatically.
 
 Introducing structures is done using the `struct` tag which can be used to
 describe forward declarations, empty structures, and structures with member
-objects. Providing only the structure name will result in a forward declaration
-whilst an empty `member` node results in an empty structure, finally use the
-`member` tag with an optional name and a `type` tag to produce a member object.
+objects. Providing only the structure name as the text to the `struct` tag will
+result in a forward declaration; an empty `body` tag results in an empty
+structure, finally using the `body` tag with a number of nested `member` tags
+containing optional name text and a mandatory `type` tag produces a structure
+with member objects.
 
 ```xml
 <struct>forward_t</struct>
 <struct>empty_t<member></member></struct>
-<struct>position_t
+<struct>position_t<body>
   <member>x<type>float</type></member>
   <member>y<type>float</type></member>
-</struct>
+</body></struct>
 ```
 
 This outputs the following set of structure output.
@@ -101,5 +103,28 @@ struct empty_t {};
 struct position_t {
   float x;
   float y;
+};
+```
+
+### Enumerations
+
+Generation of enumerations is done using the `enum` tag, this is functionally
+equivalent to a structure with nested member objects. An
+
+```xml
+<enum>positions<body>
+    <constant>CENTER</constant>
+    <constant>LEFT<value>-1</value></constant>
+    <constant>RIGHT<value>1</value></constant>
+</body></enum>
+```
+
+Will generate the following C code.
+
+```c
+enum positions {
+  CENTER,
+  LEFT = -1,
+  RIGHT = 1
 };
 ```

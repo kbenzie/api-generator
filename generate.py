@@ -28,16 +28,12 @@ def is_identifier(identifier):
             'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X',
             'Y', 'Z']
     digits = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9']
-
     if not identifier[:1] in nondigits:
         return False
-
     characters = nondigits + digits
-
     for char in identifier[1:]:
         if not char in characters:
             return False
-
     return True
 
 
@@ -55,14 +51,13 @@ def include(node):
 
 def define(node):
     define = '#' + node.tag + ' ' + node.text
-
     params = node.findall('param')
+    # TODO Output nice diagnostics for unexpected input, use is_identifier()
     if 0 < len(params):
         param_names = []
         for param in params:
             param_names.append(param.text)
         define += '(' + ', '.join(param_names) + ')'
-
     value = node.find('value')
     if None != value:
         lines = value.text.split('\n')
@@ -75,31 +70,62 @@ def define(node):
 
 
 def struct(node, semicolon = True):
-    struct = 'struct ' + str.strip(node.text)
-
-    members = node.findall('member')
-    if 0 < len(members):
-        struct += ' {'
-        member_decls = []
-        for member in members:
-            if None != member:
-                type = member.find('type')
-                if None != type:
-                    member_decl = indent + type.text
-                    if None != member.text:
-                        member_decl += ' ' + member.text
-                    member_decls.append(member_decl)
-        if 0 < len(member_decls):
-            struct += '\n' + ';\n'.join(member_decls) + ';\n'
-        struct += '}'
-
+    struct = 'struct'
+    if None != node.text:
+        struct += ' ' + node.text
+    body = node.find('body')
+    # TODO Output nice diagnostics for unexpected input, use is_identifier()
+    if None != body:
+        members = body.findall('member')
+        if 0 < len(members):
+            struct += ' {'
+            member_decls = []
+            for member in members:
+                if None != member:
+                    type = member.find('type')
+                    if None != type:
+                        member_decl = indent + type.text
+                        if None != member.text:
+                            member_decl += ' ' + member.text
+                        member_decls.append(member_decl)
+            if 0 < len(member_decls):
+                struct += '\n' + ';\n'.join(member_decls) + ';\n'
+            struct += '}'
     if semicolon:
         struct += ';'
     print(struct)
 
 
-def typedef(node):
-    typedef = 'typedef '
+def enum(node, semicolon = True):
+    enum = 'enum'
+    if None != node.text:
+        enum += ' ' + node.text
+    enum += ' {'
+    body = node.find('body')
+    # TODO Output nice diagnostics for unexpected input, use is_identifier()
+    if None == body:
+        fail("missing enum body tag")
+    constants = body.findall('constant')
+    if 0 < len(constants):
+        enum += '\n'
+        constant_decls = []
+        for constant in constants:
+            if None != constant:
+                if None == constant.text:
+                    fail("invalid enum constant")
+                decl = indent + constant.text
+                value = constant.find('value')
+                if None != value:
+                    decl += ' = ' + value.text
+                constant_decls.append(decl)
+        enum += ',\n'.join(constant_decls) + '\n'
+    if semicolon:
+        enum += '};'
+    print(enum)
+
+
+def function(node):
+    function = ''
 
 
 def generate(schema_file, output_dir, client_name):
@@ -113,8 +139,10 @@ def generate(schema_file, output_dir, client_name):
             define(node)
         elif 'struct' == node.tag:
             struct(node)
-        elif 'typedef' == node.tag:
-            typedef(node)
+        elif 'enum' == node.tag:
+            enum(node)
+        elif 'function' == node.tag:
+            function(node)
 
 
 def main():
