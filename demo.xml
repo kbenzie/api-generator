@@ -1,0 +1,38 @@
+<?xml version="1.0"?>
+<interface><!--std="C89"-->
+
+  <include>stddef.h</include>
+  <include form="angle">stdint.h</include>
+  <include form="quote">myheader.h</include>
+
+  <define>TAG</define>
+  <define>PI<value>3.14</value></define>
+  <define>UNUSED<param>VARIABLE</param><value>(void)VARIABLE;</value></define>
+  <define>ASSERT<param>CONDITION</param><param>MESSAGE</param>
+    <value>if (CONDITION) {
+  fprintf(stderr, MESSAGE);
+  abort();
+}</value></define>
+
+  <struct>position_t
+    <member><type>float</type>x</member>
+    <member><type>float</type>y</member>
+    <member><type>float</type>z</member>
+  </struct>
+
+  <typedef><type>int32_t</type>error_t</typedef>
+  <typedef><type><struct>forward_t</struct>*</type>forward</typedef>
+  <typedef><type><struct>position_t
+      <member><type>float</type>x</member>
+      <member><type>float</type>y</member>
+      <member><type>float</type>z</member>
+    </struct><type>position_t</typedef>
+
+  <enum>
+    <constant></constant>
+  </enum>
+
+  <function><return>void</return>foo
+    <param><type>uint32_t</type>count</param>
+  </function>
+</interface>
