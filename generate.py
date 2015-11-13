@@ -108,7 +108,9 @@ def struct(node, semicolon, newline):
 def enum(node, semicolon, newline):
     enum = 'enum'
     if node.text:
-        enum += ' ' + prefix + node.text.strip()
+        name = node.text.strip()
+        if '' != name:
+            enum += ' ' + prefix + name
     enum += ' {'
     scope = node.find('scope')
     # TODO Output nice diagnostics for unexpected input, use is_identifier()
