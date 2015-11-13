@@ -12,7 +12,8 @@ comment.</comment>
     <guard>__cplusplus<scope form="open">extern "C"</scope></guard>
 
     <block>
-      <include>stddef.h</include>
+      <include>stddef.h
+      </include>
       <include form="angle">stdint.h</include>
       <include form="quote">myheader.h</include>
     </block>

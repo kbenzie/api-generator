@@ -35,12 +35,15 @@ def is_identifier(identifier):
 
 
 def include(node, newline):
+    if None == node.text:
+        fail('massing include file')
+    name = node.text.strip()
     include = '#' + node.tag + ' '
     form = node.attrib.get('form')
     if None == form or 'angle' == form:
-        include += '<' + node.text + '>'
+        include += '<' + name + '>'
     elif 'quote' == form:
-        include += '"' + node.text + '"'
+        include += '"' + name + '"'
     else:
         fail('invalid include form: ' + form)
     if newline:
