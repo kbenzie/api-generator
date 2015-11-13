@@ -117,6 +117,10 @@ equivalent to a structure with nested member objects. An
     <constant>LEFT<value>-1</value></constant>
     <constant>RIGHT<value>1</value></constant>
 </body></enum>
+<enum><body>
+    <constant>SUCCESS</constant>
+    <constant>FAILURE</constant>
+</body></enum>
 ```
 
 Will generate the following C code.
@@ -127,4 +131,27 @@ enum positions {
   LEFT = -1,
   RIGHT = 1
 };
+enum {
+  SUCCESS,
+  FAILURE
+};
+```
+
+### Functions
+
+```xml
+<function>nop<return>void</return></function>
+<function>foo<return>uint32_t</return>
+  <param>count<type>uint32_t</type></param>
+</function>
+<function>main<return>int</return>
+  <param>argc<type>int</type></param>
+  <param>argv<type>char **</type></param>
+</function>
+```
+
+```c
+void nop();
+uint32_t foo(uint32_t count);
+int main(int argc, char ** argv);
 ```
