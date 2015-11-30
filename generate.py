@@ -10,7 +10,7 @@ import sys
 
 
 indent = '  '
-prefix = 'demo_'
+prefix = ''
 
 
 def fail(message):
@@ -34,10 +34,14 @@ def is_identifier(identifier):
     return True
 
 
+def replace_prefix(identifier):
+    return identifier.replace("${prefix}", prefix)
+
+
 def include(node, newline):
     if None == node.text:
         fail('massing include file')
-    name = node.text.strip()
+    name = replace_prefix(node.text.strip())
     include = '#' + node.tag + ' '
     form = node.attrib.get('form')
     if None == form or 'angle' == form:
@@ -52,13 +56,13 @@ def include(node, newline):
 
 
 def define(node, newline):
-    define = '#' + node.tag + ' ' + prefix.upper() + node.text
+    define = '#' + node.tag + ' ' + replace_prefix(node.text.strip()).upper()
     params = node.findall('param')
     # TODO Output nice diagnostics for unexpected input, use is_identifier()
     if 0 < len(params):
         param_names = []
         for param in params:
-            param_names.append(param.text)
+            param_names.append(replace_prefix(param.text.strip()))
         define += '(' + ', '.join(param_names) + ')'
     value = node.find('value')
     if None != value:
@@ -76,10 +80,10 @@ def define(node, newline):
 def struct(node, semicolon, newline):
     struct = 'struct'
     if node.text:
-        name = node.text.strip()
+        name = replace_prefix(node.text.strip())
         if not is_identifier(name):
             fail('invalid struct name: ' + name)
-        struct += ' ' + prefix + name
+        struct += ' ' + name
     scope = node.find('scope')
     # TODO Output nice diagnostics for unexpected input, use is_identifier()
     if None != scope:
@@ -91,10 +95,25 @@ def struct(node, semicolon, newline):
                 if None != member:
                     type = member.find('type')
                     if None != type:
-                        member_decl = indent + type.text.strip()
+                        member_decl = indent + replace_prefix(type.text.strip())
                         if member.text:
-                            member_decl += ' ' + member.text.strip()
+                            member_decl += ' ' + \
+                                    replace_prefix(member.text.strip())
                         member_decls.append(member_decl)
+                    member_function = member.find('function')
+                    if None != member_function:
+                        function_form = member_function.attrib.get('form')
+                        if 'pointer' != function_form:
+                            fail('struct member function is not a function pointer')
+                        member_decls.append(indent + function(member_function,
+                            False, False, False))
+                    member_union = member.find('union')
+                    if None != member_union:
+                        union_decls = union(member_union, False, False,
+                                False).split('\n')
+                        union_decl = '\n'.join([indent + decl \
+                                for decl in union_decls])
+                        member_decls.append(union_decl)
             if 0 < len(member_decls):
                 struct += '\n' + ';\n'.join(member_decls) + ';\n'
             struct += '}'
@@ -105,12 +124,55 @@ def struct(node, semicolon, newline):
     sys.stdout.write(struct)
 
 
+def union(node, semicolon, newline, out = True):
+    union = 'union'
+    if node.text:
+        name = replace_prefix(node.text.strip())
+        if not is_identifier(name):
+            fail('invalid union name: ' + name)
+        union += ' ' + name
+    scope = node.find('scope')
+    if None != scope:
+        members = scope.findall('member')
+        if 0 < len(members):
+            union += ' {'
+            member_decls = []
+            for member in members:
+                if None != member:
+                    member_name = replace_prefix(member.text.strip())
+                    type = member.find('type')
+                    if None != type:
+                        member_decl = indent + replace_prefix(type.text.strip())
+                        if None == member.text:
+                            fail('union member has no name')
+                        member_decl += ' ' + member_name
+                        member_decls.append(member_decl)
+                    struct = member.find('struct')
+                    if None != struct:
+                        struct_name = replace_prefix(struct.text.strip())
+                        if None != struct_name:
+                            member_decl = indent + 'struct ' + struct_name + \
+                                    ' ' + member_name
+                            member_decls.append(member_decl)
+            if 0 < len(member_decls):
+                union += '\n' + ';\n'.join(member_decls) + ';\n'
+            union += '}'
+    if semicolon:
+        union += ';'
+    if newline:
+        union += '\n\n'
+    if out:
+        sys.stdout.write(union)
+    else:
+        return union
+
+
 def enum(node, semicolon, newline):
     enum = 'enum'
     if node.text:
         name = node.text.strip()
         if '' != name:
-            enum += ' ' + prefix + name
+            enum += ' ' + replace_prefix(name)
     enum += ' {'
     scope = node.find('scope')
     # TODO Output nice diagnostics for unexpected input, use is_identifier()
@@ -124,10 +186,10 @@ def enum(node, semicolon, newline):
             if None != constant:
                 if None == constant.text:
                     fail("invalid enum constant")
-                decl = indent + constant.text.strip()
+                decl = indent + replace_prefix(constant.text.strip())
                 value = constant.find('value')
                 if None != value:
-                    decl += ' = ' + value.text.strip()
+                    decl += ' = ' + replace_prefix(value.text.strip())
                 constant_decls.append(decl)
         enum += ',\n'.join(constant_decls) + '\n'
     enum += '}'
@@ -139,23 +201,22 @@ def enum(node, semicolon, newline):
 
 
 def typedef(node, newline):
-    name = node.text.strip()
+    name = replace_prefix(node.text.strip())
     if None == name:
         fail('missing typedef type name')
-    name = prefix + name
     type = node.find('type')
     if None == type:
         fail('missing typedef type')
     sys.stdout.write('typedef ')
     if None != type.getchildren():
         generate(type, False, False)
-        sys.stdout.write(' ' + type.text.strip())
+        if None != type.text:
+            sys.stdout.write(' ' + replace_prefix(type.text.strip()))
         sys.stdout.write(' ' + name);
     print(';\n')
 
 
-
-def function(node, semicolon, newline):
+def function(node, semicolon, newline, out = True):
     if None == node.text:
         fail('missing function name')
     return_type = node.find('return')
@@ -163,7 +224,16 @@ def function(node, semicolon, newline):
         fail('missing function return')
     if None == return_type.text:
         fail("missing function return type name")
-    function = return_type.text + ' ' + prefix + node.text.strip() + '('
+    function = replace_prefix(return_type.text.strip()) + ' '
+    name = replace_prefix(node.text.strip())
+    form = node.attrib.get('form')
+    if None != form:
+        if 'pointer' == form:
+            function += '(*' + name + ')('
+        else:
+            fail('invalid function form: ' + form)
+    else:
+        function += name + '('
     params = node.findall('param')
     if 0 < len(params):
         param_decls = []
@@ -173,23 +243,20 @@ def function(node, semicolon, newline):
                 fail('missing function parameter type')
             if None == param_type.text:
                 fail('missing function parameter type name')
-            decl = param_type.text
+            decl = replace_prefix(param_type.text.strip())
             if param.text:
-                decl += ' ' + param.text
+                decl += ' ' + replace_prefix(param.text.strip())
             param_decls.append(decl)
         function += ', '.join(param_decls)
     function += ')'
-    body = node.find('scope')
-    if None != body:
-        # TODO don't print body when in header mode
-        function += ' '
-        sys.stdout.write(function)
-        scope(body, False, False)
-    elif semicolon:
+    if semicolon:
         function += ';'
-        print(function)
     if newline:
-        print()
+        function += '\n'
+    if out:
+        print(function)
+    else:
+        return function
 
 
 def comment(node, newline):
@@ -221,7 +288,7 @@ def scope(node, semicolon, newline):
             fail('invalid scope form: ' + form)
     name = ''
     if node.text:
-        name = node.text.strip()
+        name = replace_prefix(node.text.strip())
     if open:
         if '' == name:
             print('{')
@@ -240,19 +307,28 @@ def scope(node, semicolon, newline):
 def guard(node, semicolon, newline):
     if not node.text:
         fail('missing guard name')
-    name = node.text.strip()
+    name = replace_prefix(node.text.strip())
     form = node.attrib.get('form')
     if 'include' == form:
-        print('#ifndef ' + prefix.upper() + name)
-        print('#define ' + prefix.upper() + name + '\n')
+        print('#ifndef ' + replace_prefix(name).upper())
+        print('#define ' + replace_prefix(name).upper() + '\n')
         generate(node, semicolon, True)
-        print('#endif  // ' + prefix.upper() + name)
+        print('#endif  // ' + replace_prefix(name).upper())
+    elif 'defined':
+        print('#ifdef ' + name)
+        generate(node, semicolon, False)
+        print('#endif  // ' + replace_prefix(name).upper())
     else:
         print('#ifndef ' + name)
         generate(node, semicolon, False)
         print('#endif  // ' + name)
     if newline:
         print()
+
+
+def code(node):
+    if node.text:
+        print(node.text)
 
 
 def generate(parent, semicolon = True, newline = True):
@@ -263,6 +339,8 @@ def generate(parent, semicolon = True, newline = True):
             define(node, newline)
         elif 'struct' == node.tag:
             struct(node, semicolon, newline)
+        elif 'union' == node.tag:
+            union(node, semicolon, newline)
         elif 'enum' == node.tag:
             enum(node, semicolon, newline)
         elif 'typedef' == node.tag:
@@ -277,6 +355,8 @@ def generate(parent, semicolon = True, newline = True):
             scope(node, semicolon, newline)
         elif 'guard' == node.tag:
             guard(node, semicolon, newline)
+        elif 'code' == node.tag:
+            code(node)
 
 
 def help():
@@ -308,8 +388,6 @@ def main():
     if not path.exists(schema) or not path.isfile(schema):
         fail('invalid schema file:' + schema);
 
-    schema_file = "./demo.xml"
-
     for opt, arg in options:
         if opt in ('-h'):
             help()
@@ -320,7 +398,7 @@ def main():
                 sys.exit(1)
             prefix = arg
 
-    tree = XML.parse(schema_file)
+    tree = XML.parse(schema)
     interface = tree.getroot()
     generate(interface)
 

@@ -86,5 +86,11 @@ comment.</comment>
       </type>
     </typedef>
 
+    <union>combinator_t<scope>
+        <member>foo<type>uint32_t</type></member>
+        <member>bar<type>double</type></member>
+        <member>holder<struct>holder_t</struct></member>
+    </scope></union>
+
   </guard>
 </interface>
