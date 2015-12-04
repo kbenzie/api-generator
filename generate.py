@@ -162,10 +162,19 @@ def replace_prefix(identifier):
     return identifier.replace("${prefix}", prefix).replace("${Prefix}", prefix.capitalize()).replace("${PREFIX}", prefix.upper())
 
 
-def replace_arguments(text, arguments):
-    text = text.replace("${forward}", ', '.join(arguments))
-    # TODO: Support any numbered argument!
-    text = text.replace("${0}", arguments[0])
+def replace_variables(text):
+    start = text.find('${')
+    while -1 != start:
+        end = text.find('}')
+        var_name = text[start + 2:end]
+        replaced = False
+        for variable in variables:
+            if var_name in variable.name:
+                text = text.replace('${' + var_name + '}', variable.values[0])
+                replaced = True
+        if not replaced:
+            raise Exception('could not replace:', var_name)
+        start = text.find('${')
     return text
 
 
@@ -213,7 +222,8 @@ def replace_stub(text, name, arguments):
     stub = stub.replace("${forward}", ', '.join(arguments))
     # TODO: Support any numbered argument!
     stub = stub.replace("${0}", arguments[0])
-    return stub.replace("${prefix}", prefix)
+    stub = stub.replace("${prefix}", prefix)
+    return replace_variables(stub)
 
 
 def include(node, newline):
