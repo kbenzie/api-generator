@@ -30,6 +30,17 @@ import sys
 
 indent = '  '
 prefix = ''
+stub = None
+variables = []
+
+
+class Variable:
+    name = ''
+    values = []
+
+    def __init__(self, name, values):
+        self.name = name
+        self.values = values
 
 
 class DoxygenParam:
@@ -149,6 +160,60 @@ def is_identifier(identifier):
 
 def replace_prefix(identifier):
     return identifier.replace("${prefix}", prefix).replace("${Prefix}", prefix.capitalize()).replace("${PREFIX}", prefix.upper())
+
+
+def replace_arguments(text, arguments):
+    text = text.replace("${forward}", ', '.join(arguments))
+    # TODO: Support any numbered argument!
+    text = text.replace("${0}", arguments[0])
+    return text
+
+
+def replace_stub(text, name, arguments):
+    stub = ''
+    text = text.replace("${name}", name.replace("${prefix}", ""))
+    capturing = False
+
+    loop_variable = None
+    loop_iterator = ''
+    loop_lines = []
+
+    for line in text.split('\n'):
+        if '${foreach}' in line:
+            capturing = True
+
+            # Reset loop state
+            loop_variable = None
+            loop_iterator = ''
+            loop_lines = []
+
+            expr = line[line.find('(') + 1:line.find(')')]
+            in_pos = expr.find('in')
+            iter_name = expr[:in_pos].strip()
+            var_name = expr[in_pos + 2:].strip()
+            for variable in variables:
+                if var_name == variable.name:
+                    for value in variable.values:
+                        loop_variable = variable
+                        loop_iterator = iter_name
+
+            if None == loop_variable:
+                raise Exception('invalid ${foreach} variable', var_name)
+        elif '${endforeach}' in line:
+            # TODO: Write loop
+            for value in loop_variable.values:
+                for line in loop_lines:
+                    stub += line.replace('${' + loop_iterator + '}', value) + '\n'
+            capturing = False
+        elif capturing:
+            loop_lines.append(line)
+        else:
+            stub += line + '\n'
+
+    stub = stub.replace("${forward}", ', '.join(arguments))
+    # TODO: Support any numbered argument!
+    stub = stub.replace("${0}", arguments[0])
+    return stub.replace("${prefix}", prefix)
 
 
 def include(node, newline):
@@ -375,7 +440,8 @@ def function(node, semicolon, newline, out = True):
         if None != tag:
             doxygen.ret = tag.text
     function = replace_prefix(return_type.text.strip()) + ' '
-    name = replace_prefix(node.text.strip())
+    prefix_name = node.text.strip()
+    name = replace_prefix(prefix_name)
     form = node.attrib.get('form')
     if None != form:
         if 'pointer' == form:
@@ -386,6 +452,7 @@ def function(node, semicolon, newline, out = True):
         function += name + '('
     params = node.findall('param')
     doxygen.params = []
+    param_names = []
     if 0 < len(params):
         param_decls = []
         for param in params:
@@ -400,6 +467,7 @@ def function(node, semicolon, newline, out = True):
                 doxygen_param = DoxygenParam(param.text, param.find('doxygen')).output()
                 if '' != doxygen_param:
                     doxygen.params.append(doxygen_param)
+                param_names.append(param.text)
             param_decls.append(decl)
         function += ', '.join(param_decls)
     function += ')'
@@ -407,10 +475,12 @@ def function(node, semicolon, newline, out = True):
         function += ';'
     if newline:
         function += '\n'
-    if not doxygen.empty():
+    if not doxygen.empty() and None == stub:
         function = doxygen.output() + '\n' + function
     if out:
         print(function)
+        if None != stub:
+            print('{\n' + replace_stub(stub.text, prefix_name, param_names) + '\n}\n')
     else:
         return function
 
@@ -488,61 +558,76 @@ def code(node):
 
 
 def generate(parent, semicolon = True, newline = True):
-    for node in parent:
-        if 'include' == node.tag:
-            include(node, newline)
-        elif 'define' == node.tag:
-            define(node, newline)
-        elif 'struct' == node.tag:
-            struct(node, semicolon, newline)
-        elif 'union' == node.tag:
-            union(node, semicolon, newline)
-        elif 'enum' == node.tag:
-            enum(node, semicolon, newline)
-        elif 'typedef' == node.tag:
-            typedef(node, newline)
-        elif 'function' == node.tag:
-            function(node, semicolon, newline)
-        elif 'comment' == node.tag:
-            comment(node, newline)
-        elif 'block' == node.tag:
-            block(node)
-        elif 'scope' == node.tag:
-            scope(node, semicolon, newline)
-        elif 'guard' == node.tag:
-            guard(node, semicolon, newline)
-        elif 'code' == node.tag:
-            code(node)
+    if None == stub:
+        for node in parent:
+            if 'include' == node.tag:
+                include(node, newline)
+            elif 'define' == node.tag:
+                define(node, newline)
+            elif 'struct' == node.tag:
+                struct(node, semicolon, newline)
+            elif 'union' == node.tag:
+                union(node, semicolon, newline)
+            elif 'enum' == node.tag:
+                enum(node, semicolon, newline)
+            elif 'typedef' == node.tag:
+                typedef(node, newline)
+            elif 'function' == node.tag:
+                function(node, semicolon, newline)
+            elif 'comment' == node.tag:
+                comment(node, newline)
+            elif 'block' == node.tag:
+                block(node)
+            elif 'scope' == node.tag:
+                scope(node, semicolon, newline)
+            elif 'guard' == node.tag:
+                guard(node, semicolon, newline)
+            elif 'code' == node.tag:
+                code(node)
+    else:
+        print(replace_prefix('#include <${prefix}/${prefix}.h>\n'))
+        for node in parent:
+            if 'guard' == node.tag:
+                for guard_node in node:
+                    if 'function' == guard_node.tag:
+                        function(guard_node, False, False)
+            if 'function' == node.tag:
+                function(node, False, False)
 
 
 def help():
-    print('generate.py [options] <schema>')
-    print('\noptions:')
-    print('        -h                      show this help message')
-    print('        -p <prefix>             identifier to be prefixed')
+    print('generate.py [options] <schema>\n')
+    print('options:')
+    print('        -h                            show this help message')
+    print('        -p <prefix>                   identifier to be prefixed')
+    print('        -s <name>                     output function stubs')
+    print('        -v <variable>:<value>[;...]   add user variable')
 
 
 def main():
     global indent
     global prefix
+    global stub
 
     if 1 == len(sys.argv):
         help()
         sys.exit(1)
 
     # TODO Add options for outputting header or source files
-    options, arguments = getopt.getopt(sys.argv[1:], 'hs:o:p:')
+    options, arguments = getopt.getopt(sys.argv[1:], 'hp:s:v:')
 
     if 0 == len(arguments):
         raise Exception('missing schema file')
 
     if 1 != len(arguments):
         for arg in arguments:
-            print('invalid argument:', arg)
-            sys.exit(1)
+            raise Exception('invalid argument:', arg)
     schema = arguments[0]
     if not path.exists(schema) or not path.isfile(schema):
-        raise Exception('invalid schema file:' + schema);
+        raise Exception('invalid schema file:', schema);
+
+    tree = XML.parse(schema)
+    interface = tree.getroot()
 
     for opt, arg in options:
         if opt in ('-h'):
@@ -550,12 +635,20 @@ def main():
             sys.exit(0)
         elif opt in ('-p'):
             if not is_identifier(arg):
-                print('invalid C prefix:', arg)
-                sys.exit(1)
+                raise Exception('invalid C prefix:', arg)
             prefix = arg
+        elif opt in ('-s'):
+            stubs = interface.find('stubs')
+            for node in stubs:
+                if arg == node.attrib.get('name'):
+                    stub = node
+            if None == stub:
+                raise Exception('could not find stub named:', arg)
+        elif opt in ('-v'):
+            name_end = str(arg).find(':')
+            variable = Variable(arg[0:name_end], arg[name_end + 1:].split(';'))
+            variables.append(variable)
 
-    tree = XML.parse(schema)
-    interface = tree.getroot()
     generate(interface)
 
 
