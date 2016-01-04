@@ -31,6 +31,7 @@ import sys
 indent = '  '
 prefix = ''
 stub = None
+stub_includes = []
 variables = []
 
 
@@ -595,7 +596,23 @@ def generate(parent, semicolon = True, newline = True):
             elif 'code' == node.tag:
                 code(node)
     else:
-        print(replace_prefix('#include <${prefix}/${prefix}.h>\n'))
+        print(replace_prefix('#include <${prefix}/${prefix}.h>'))
+        for stub_include in stub_includes:
+            if '${foreach}' in stub_include:
+                loop = stub_include[stub_include.find('(') + 1 : stub_include.find(')')].split(' ')
+                elem = loop[0]
+                var_name = loop[2]
+                expr = stub_include[stub_include.find(')') + 1 : stub_include.find('${endforeach}')]
+                for variable in variables:
+                    if var_name == variable.name:
+                        for value in variable.values:
+                            print('#include <' + expr.replace('${' + elem + '}', value) + '>')
+
+                # print(expr)
+            else:
+                print(replace_prefix('#include <' + stub_include + '>'))
+        print()
+
         for node in parent:
             if 'guard' == node.tag:
                 for guard_node in node:
@@ -618,6 +635,7 @@ def main():
     global indent
     global prefix
     global stub
+    global stub_includes
 
     if 1 == len(sys.argv):
         help()
@@ -650,8 +668,11 @@ def main():
         elif opt in ('-s'):
             stubs = interface.find('stubs')
             for node in stubs:
-                if arg == node.attrib.get('name'):
-                    stub = node
+                if 'stub' == node.tag:
+                    if arg == node.attrib.get('name'):
+                        stub = node
+                elif 'include' == node.tag:
+                    stub_includes.append(node.text)
             if None == stub:
                 raise Exception('could not find stub named:', arg)
         elif opt in ('-v'):
