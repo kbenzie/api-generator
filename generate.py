@@ -30,8 +30,13 @@ import sys
 
 indent = '  '
 prefix = ''
+functions_only = False
+includes = []
 stub = None
 stub_includes = []
+stub_guards_on = False
+stub_prefix = ''
+stub_qualifier = ''
 variables = []
 
 
@@ -160,7 +165,17 @@ def is_identifier(identifier):
 
 
 def replace_prefix(identifier):
-    return identifier.replace("${prefix}", prefix).replace("${Prefix}", prefix.capitalize()).replace("${PREFIX}", prefix.upper())
+    output = identifier.replace("${prefix}", prefix)
+    output = output.replace("${Prefix}", prefix.capitalize())
+    output = output.replace("${PREFIX}", prefix.upper())
+    return output
+
+
+def replace_stub_prefix(identifier, name = ''):
+    output = identifier.replace("${stub_prefix}", name)
+    output = output.replace("${Stub_Prefix}", name.capitalize())
+    output = output.replace("${STUB_PREFIX}", name.upper())
+    return output
 
 
 def replace_variables(text):
@@ -223,217 +238,224 @@ def replace_stub(text, name, arguments):
     stub = stub.replace("${forward}", ', '.join(arguments))
     # TODO: Support any numbered argument!
     stub = stub.replace("${0}", arguments[0])
-    stub = stub.replace("${prefix}", prefix)
+    stub = replace_stub_prefix(stub, stub_prefix)
+    stub = replace_prefix(stub)
     return replace_variables(stub)
 
 
 def include(node, newline):
-    if None == node.text:
-        raise Exception('missing include file')
-    name = replace_prefix(node.text.strip())
-    include = '#' + node.tag + ' '
-    form = node.attrib.get('form')
-    if None == form or 'angle' == form:
-        include += '<' + name + '>'
-    elif 'quote' == form:
-        include += '"' + name + '"'
-    else:
-        raise Exception('invalid include form: ' + form)
-    if newline:
-        include += '\n'
-    print(include)
+    if not functions_only:
+        if None == node.text:
+            raise Exception('missing include file')
+        name = replace_prefix(node.text.strip())
+        include = '#' + node.tag + ' '
+        form = node.attrib.get('form')
+        if None == form or 'angle' == form:
+            include += '<' + name + '>'
+        elif 'quote' == form:
+            include += '"' + name + '"'
+        else:
+            raise Exception('invalid include form: ' + form)
+        if newline:
+            include += '\n'
+        print(include)
 
 
 def define(node, newline):
-    docs = Doxygen(node.find('doxygen'))
-    define = '#' + node.tag + ' ' + replace_prefix(node.text.strip()).upper()
-    params = node.findall('param')
-    # TODO Output nice diagnostics for unexpected input, use is_identifier()
-    if 0 < len(params):
-        param_names = []
-        for param in params:
-            param_names.append(replace_prefix(param.text.strip()))
-        define += '(' + ', '.join(param_names) + ')'
-    value = node.find('value')
-    if None != value:
-        lines = value.text.split('\n')
-        if 1 < len(lines):
-            continuation = ' \\\n'
-            define += continuation + indent + (continuation + indent).join(lines)
-        elif 1 == len(lines):
-            define += ' ' + lines[0]
-    if newline:
-        define += '\n'
-    if not docs.empty():
-        print(docs.output())
-    print(define)
+    if not functions_only:
+        docs = Doxygen(node.find('doxygen'))
+        define = '#' + node.tag + ' ' + replace_prefix(node.text.strip()).upper()
+        params = node.findall('param')
+        # TODO Output nice diagnostics for unexpected input, use is_identifier()
+        if 0 < len(params):
+            param_names = []
+            for param in params:
+                param_names.append(replace_prefix(param.text.strip()))
+            define += '(' + ', '.join(param_names) + ')'
+        value = node.find('value')
+        if None != value:
+            lines = value.text.split('\n')
+            if 1 < len(lines):
+                continuation = ' \\\n'
+                define += continuation + indent + (continuation + indent).join(lines)
+            elif 1 == len(lines):
+                define += ' ' + lines[0]
+        if newline:
+            define += '\n'
+        if not docs.empty():
+            print(docs.output())
+        print(define)
 
 
 def struct(node, semicolon, newline):
-    doxygen = Doxygen(node.find('doxygen'))
-    struct = 'struct'
-    if node.text:
-        name = replace_prefix(node.text.strip())
-        if not is_identifier(name):
-            raise Exception('invalid struct name: ' + name)
-        struct += ' ' + name
-    scope = node.find('scope')
-    # TODO Output nice diagnostics for unexpected input, use is_identifier()
-    if None != scope:
-        members = scope.findall('member')
-        if 0 < len(members):
-            struct += ' {'
-            member_decls = []
-            for member in members:
-                if None != member:
-                    doxygen_member = Doxygen(member.find('doxygen')).output()
-                    type = member.find('type')
-                    if None != type:
-                        member_decl = ''
-                        if '' != doxygen_member:
-                            doxygen_members = doxygen_member.split('\n')
-                            doxygen_member = ''
-                            for line in doxygen_members:
-                                doxygen_member += indent + line + '\n'
-                            doxygen_member = doxygen_member.rstrip()
-                            member_decl += doxygen_member + '\n'
-                        member_decl += indent + replace_prefix(type.text.strip())
-                        if member.text:
-                            member_decl += ' ' + \
-                                    replace_prefix(member.text.strip())
-                        member_decls.append(member_decl)
-                    member_function = member.find('function')
-                    if None != member_function:
-                        function_form = member_function.attrib.get('form')
-                        if 'pointer' != function_form:
-                            raise Exception('struct member function is not a function pointer')
-                        member_decl = ''
-                        if '' != doxygen_member:
-                            member_decl += indent + doxygen_member + '\n'
-                        member_decl += indent + function(member_function, False, False, False)
-                        member_decls.append(member_decl)
-                    member_union = member.find('union')
-                    if None != member_union:
-                        union_decls = []
-                        if '' != doxygen_member:
-                            union_decls.append(doxygen_member)
-                        union_decls.extend(union(member_union, False, False, False).split('\n'))
-                        union_decl = '\n'.join([indent + decl for decl in union_decls])
-                        member_decls.append(union_decl)
-            if 0 < len(member_decls):
-                struct += '\n' + ';\n'.join(member_decls) + ';\n'
-            struct += '}'
-    if semicolon:
-        struct += ';'
-    if newline:
-        struct += '\n\n'
-    docs = doxygen.output()
-    if '' != docs:
-        print(docs)
-    sys.stdout.write(struct)
+    if not functions_only:
+        doxygen = Doxygen(node.find('doxygen'))
+        struct = 'struct'
+        if node.text:
+            name = replace_prefix(node.text.strip())
+            if not is_identifier(name):
+                raise Exception('invalid struct name: ' + name)
+            struct += ' ' + name
+        scope = node.find('scope')
+        # TODO Output nice diagnostics for unexpected input, use is_identifier()
+        if None != scope:
+            members = scope.findall('member')
+            if 0 < len(members):
+                struct += ' {'
+                member_decls = []
+                for member in members:
+                    if None != member:
+                        doxygen_member = Doxygen(member.find('doxygen')).output()
+                        type = member.find('type')
+                        if None != type:
+                            member_decl = ''
+                            if '' != doxygen_member:
+                                doxygen_members = doxygen_member.split('\n')
+                                doxygen_member = ''
+                                for line in doxygen_members:
+                                    doxygen_member += indent + line + '\n'
+                                doxygen_member = doxygen_member.rstrip()
+                                member_decl += doxygen_member + '\n'
+                            member_decl += indent + replace_prefix(type.text.strip())
+                            if member.text:
+                                member_decl += ' ' + \
+                                        replace_prefix(member.text.strip())
+                            member_decls.append(member_decl)
+                        member_function = member.find('function')
+                        if None != member_function:
+                            function_form = member_function.attrib.get('form')
+                            if 'pointer' != function_form:
+                                raise Exception('struct member function is not a function pointer')
+                            member_decl = ''
+                            if '' != doxygen_member:
+                                member_decl += indent + doxygen_member + '\n'
+                            member_decl += indent + function(member_function, False, False, False)
+                            member_decls.append(member_decl)
+                        member_union = member.find('union')
+                        if None != member_union:
+                            union_decls = []
+                            if '' != doxygen_member:
+                                union_decls.append(doxygen_member)
+                            union_decls.extend(union(member_union, False, False, False).split('\n'))
+                            union_decl = '\n'.join([indent + decl for decl in union_decls])
+                            member_decls.append(union_decl)
+                if 0 < len(member_decls):
+                    struct += '\n' + ';\n'.join(member_decls) + ';\n'
+                struct += '}'
+        if semicolon:
+            struct += ';'
+        if newline:
+            struct += '\n\n'
+        docs = doxygen.output()
+        if '' != docs:
+            print(docs)
+        sys.stdout.write(struct)
 
 
 def union(node, semicolon, newline, out = True):
-    union = 'union'
-    if node.text:
-        name = replace_prefix(node.text.strip())
-        if not is_identifier(name):
-            raise Exception('invalid union name: ' + name)
-        union += ' ' + name
-    scope = node.find('scope')
-    if None != scope:
-        members = scope.findall('member')
-        if 0 < len(members):
-            union += ' {'
-            member_decls = []
-            for member in members:
-                if None != member:
-                    member_name = replace_prefix(member.text.strip())
-                    type = member.find('type')
-                    if None != type:
-                        member_decl = indent + replace_prefix(type.text.strip())
-                        if None == member.text:
-                            raise Exception('union member has no name')
-                        member_decl += ' ' + member_name
-                        member_decls.append(member_decl)
-                    struct = member.find('struct')
-                    if None != struct:
-                        struct_name = replace_prefix(struct.text.strip())
-                        if None != struct_name:
-                            member_decl = indent + 'struct ' + struct_name + \
-                                    ' ' + member_name
+    if not functions_only:
+        union = 'union'
+        if node.text:
+            name = replace_prefix(node.text.strip())
+            if not is_identifier(name):
+                raise Exception('invalid union name: ' + name)
+            union += ' ' + name
+        scope = node.find('scope')
+        if None != scope:
+            members = scope.findall('member')
+            if 0 < len(members):
+                union += ' {'
+                member_decls = []
+                for member in members:
+                    if None != member:
+                        member_name = replace_prefix(member.text.strip())
+                        type = member.find('type')
+                        if None != type:
+                            member_decl = indent + replace_prefix(type.text.strip())
+                            if None == member.text:
+                                raise Exception('union member has no name')
+                            member_decl += ' ' + member_name
                             member_decls.append(member_decl)
-            if 0 < len(member_decls):
-                union += '\n' + ';\n'.join(member_decls) + ';\n'
-            union += '}'
-    if semicolon:
-        union += ';'
-    if newline:
-        union += '\n\n'
-    if out:
-        sys.stdout.write(union)
-    else:
-        return union
+                        struct = member.find('struct')
+                        if None != struct:
+                            struct_name = replace_prefix(struct.text.strip())
+                            if None != struct_name:
+                                member_decl = indent + 'struct ' + struct_name + \
+                                        ' ' + member_name
+                                member_decls.append(member_decl)
+                if 0 < len(member_decls):
+                    union += '\n' + ';\n'.join(member_decls) + ';\n'
+                union += '}'
+        if semicolon:
+            union += ';'
+        if newline:
+            union += '\n\n'
+        if out:
+            sys.stdout.write(union)
+        else:
+            return union
 
 
 def enum(node, semicolon, newline):
-    enum = 'enum'
-    doxygen = Doxygen(node.find('doxygen')).output()
-    if '' != doxygen:
-        enum = doxygen + '\n' + enum
-    if node.text:
-        name = node.text.strip()
-        if '' != name:
-            enum += ' ' + replace_prefix(name)
-    enum += ' {'
-    scope = node.find('scope')
-    # TODO Output nice diagnostics for unexpected input, use is_identifier()
-    if None == scope:
-        raise Exception("missing enum scope tag")
-    constants = scope.findall('constant')
-    if 0 < len(constants):
-        enum += '\n'
-        constant_decls = []
-        for constant in constants:
-            if None != constant:
-                decl = ''
-                doxygen = Doxygen(constant.find('doxygen')).output()
-                if '' != doxygen:
-                    for line in doxygen.split('\n'):
-                        decl = indent + line + '\n'
-                if None == constant.text:
-                    raise Exception("invalid enum constant")
-                decl += indent + replace_prefix(constant.text.strip())
-                value = constant.find('value')
-                if None != value:
-                    decl += ' = ' + replace_prefix(value.text.strip())
-                constant_decls.append(decl)
-        enum += ',\n'.join(constant_decls) + '\n'
-    enum += '}'
-    if semicolon:
-        enum += ';'
-    if newline:
-        enum += '\n\n'
-    sys.stdout.write(enum)
+    if not functions_only:
+        enum = 'enum'
+        doxygen = Doxygen(node.find('doxygen')).output()
+        if '' != doxygen:
+            enum = doxygen + '\n' + enum
+        if node.text:
+            name = node.text.strip()
+            if '' != name:
+                enum += ' ' + replace_prefix(name)
+        enum += ' {'
+        scope = node.find('scope')
+        # TODO Output nice diagnostics for unexpected input, use is_identifier()
+        if None == scope:
+            raise Exception("missing enum scope tag")
+        constants = scope.findall('constant')
+        if 0 < len(constants):
+            enum += '\n'
+            constant_decls = []
+            for constant in constants:
+                if None != constant:
+                    decl = ''
+                    doxygen = Doxygen(constant.find('doxygen')).output()
+                    if '' != doxygen:
+                        for line in doxygen.split('\n'):
+                            decl = indent + line + '\n'
+                    if None == constant.text:
+                        raise Exception("invalid enum constant")
+                    decl += indent + replace_prefix(constant.text.strip())
+                    value = constant.find('value')
+                    if None != value:
+                        decl += ' = ' + replace_prefix(value.text.strip())
+                    constant_decls.append(decl)
+            enum += ',\n'.join(constant_decls) + '\n'
+        enum += '}'
+        if semicolon:
+            enum += ';'
+        if newline:
+            enum += '\n\n'
+        sys.stdout.write(enum)
 
 
 def typedef(node, newline):
-    docs = Doxygen(node.find('doxygen'))
-    name = replace_prefix(node.text.strip())
-    if None == name:
-        raise Exception('missing typedef type name')
-    type = node.find('type')
-    if None == type:
-        raise Exception('missing typedef type')
-    if '' != docs:
-        print(docs.output())
-    sys.stdout.write('typedef ')
-    if None != type.getchildren():
-        generate(type, False, False)
-        if None != type.text:
-            sys.stdout.write(replace_prefix(type.text.strip()))
-        sys.stdout.write(' ' + name);
-    print(';\n')
+    if not functions_only:
+        docs = Doxygen(node.find('doxygen'))
+        name = replace_prefix(node.text.strip())
+        if None == name:
+            raise Exception('missing typedef type name')
+        type = node.find('type')
+        if None == type:
+            raise Exception('missing typedef type')
+        if '' != docs:
+            print(docs.output())
+        sys.stdout.write('typedef ')
+        if None != type.getchildren():
+            generate(type, False, False)
+            if None != type.text:
+                sys.stdout.write(replace_prefix(type.text.strip()))
+            sys.stdout.write(' ' + name);
+        print(';\n')
 
 
 def function(node, semicolon, newline, out = True):
@@ -452,7 +474,10 @@ def function(node, semicolon, newline, out = True):
             doxygen.ret = tag.text
     function = replace_prefix(return_type.text.strip()) + ' '
     prefix_name = node.text.strip()
-    name = replace_prefix(prefix_name)
+    name = replace_prefix(replace_stub_prefix(prefix_name, stub_prefix))
+    prefix_name = replace_stub_prefix(prefix_name)
+    if None != stub:
+        name = name
     form = node.attrib.get('form')
     if None != form:
         if 'pointer' == form:
@@ -544,17 +569,17 @@ def scope(node, semicolon, newline):
 def guard(node, semicolon, newline):
     if not node.text:
         raise Exception('missing guard name')
-    name = replace_prefix(node.text.strip())
+    name = replace_prefix(replace_stub_prefix(node.text.strip(), stub_prefix))
     form = node.attrib.get('form')
     if 'include' == form:
-        print('#ifndef ' + replace_prefix(name))
-        print('#define ' + replace_prefix(name) + '\n')
+        print('#ifndef ' + name)
+        print('#define ' + name + '\n')
         generate(node, semicolon, True)
-        print('#endif  // ' + replace_prefix(name))
+        print('#endif  // ' + name)
     elif 'defined':
         print('#ifdef ' + name)
         generate(node, semicolon, False)
-        print('#endif  // ' + replace_prefix(name))
+        print('#endif  // ' + name)
     else:
         print('#ifndef ' + name)
         generate(node, semicolon, False)
@@ -567,8 +592,26 @@ def code(node):
     if node.text:
         print(replace_prefix(node.text))
 
+def includes_stubs():
+    print(replace_prefix('#include <${prefix}/${prefix}.h>'))
+    for stub_include in stub_includes:
+        if '${foreach}' in stub_include:
+            loop = stub_include[stub_include.find('(') + 1 : stub_include.find(')')].split(' ')
+            elem = loop[0]
+            var_name = loop[2]
+            expr = stub_include[stub_include.find(')') + 1 : stub_include.find('${endforeach}')]
+            for variable in variables:
+                if var_name == variable.name:
+                    for value in variable.values:
+                        print('#include <' + expr.replace('${' + elem + '}', value) + '>')
+        else:
+            print(replace_prefix('#include <' + stub_include + '>'))
+    print()
+
 
 def generate(parent, semicolon = True, newline = True):
+    global prefix
+
     if None == stub:
         for node in parent:
             if 'include' == node.tag:
@@ -596,30 +639,29 @@ def generate(parent, semicolon = True, newline = True):
             elif 'code' == node.tag:
                 code(node)
     else:
-        print(replace_prefix('#include <${prefix}/${prefix}.h>'))
-        for stub_include in stub_includes:
-            if '${foreach}' in stub_include:
-                loop = stub_include[stub_include.find('(') + 1 : stub_include.find(')')].split(' ')
-                elem = loop[0]
-                var_name = loop[2]
-                expr = stub_include[stub_include.find(')') + 1 : stub_include.find('${endforeach}')]
-                for variable in variables:
-                    if var_name == variable.name:
-                        for value in variable.values:
-                            print('#include <' + expr.replace('${' + elem + '}', value) + '>')
-
-                # print(expr)
-            else:
-                print(replace_prefix('#include <' + stub_include + '>'))
-        print()
-
         for node in parent:
-            if 'guard' == node.tag:
-                for guard_node in node:
-                    if 'function' == guard_node.tag:
-                        function(guard_node, False, False)
-            if 'function' == node.tag:
+            if 'comment' == node.tag:
+                comment(node, True)
+            elif 'guard' == node.tag:
+                if stub_guards_on:
+                    guard(node, True, True)
+                else:
+                    for guard_node in node:
+                        if 'function' == guard_node.tag:
+                            function(guard_node, False, False)
+            elif 'scope' == node.tag:
+                scope(node, True, False)
+            elif 'function' == node.tag:
+                if '' != stub_qualifier:
+                    sys.stdout.write(stub_qualifier + ' ')
                 function(node, False, False)
+            elif 'block' == node.tag:
+                # TODO: This is a hack to place include's correctly, it is not
+                # a general solution as the includes will be inserted more
+                # than once if there is more than <block></block> in the schema.
+                # This should be replaced with a general solution if it causes
+                # any problems.
+                includes_stubs()
 
 
 def help():
@@ -634,15 +676,19 @@ def help():
 def main():
     global indent
     global prefix
+    global functions_only
+    global stub_guards_on
     global stub
     global stub_includes
+    global stub_prefix
+    global stub_qualifier
 
     if 1 == len(sys.argv):
         help()
         sys.exit(1)
 
     # TODO Add options for outputting header or source files
-    options, arguments = getopt.getopt(sys.argv[1:], 'hp:s:v:')
+    options, arguments = getopt.getopt(sys.argv[1:], 'hp:s:v:fg')
 
     if 0 == len(arguments):
         raise Exception('missing schema file')
@@ -671,6 +717,12 @@ def main():
                 if 'stub' == node.tag:
                     if arg == node.attrib.get('name'):
                         stub = node
+                        prefix_stub = node.attrib.get('prefix')
+                        if '' != prefix_stub:
+                            stub_prefix = prefix_stub
+                        qual = node.attrib.get('qualifier')
+                        if '' != qual:
+                            stub_qualifier = qual
                 elif 'include' == node.tag:
                     stub_includes.append(node.text)
             if None == stub:
@@ -679,6 +731,10 @@ def main():
             name_end = str(arg).find(':')
             variable = Variable(arg[0:name_end], arg[name_end + 1:].split(';'))
             variables.append(variable)
+        elif opt in ('-f'):
+            functions_only = True
+        elif opt in ('-g'):
+            stub_guards_on = True
 
     generate(interface)
 
